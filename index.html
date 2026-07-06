@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>圓心的軌跡：通過兩定點的圓</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6EFDF;
+    --paper-card:#FFFBF2;
+    --ink:#2E2A22;
+    --ink-soft:#79705C;
+    --cinnabar:#B7371E;
+    --cinnabar-soft:#F1DAD1;
+    --celadon:#4F8A72;
+    --celadon-soft:#D9E9E1;
+    --gold:#A47C2E;
+    --gold-soft:#F0E6C8;
+    --line:#DCCFA9;
+    --line-soft:#EADFC2;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; width:100%; height:100%; overflow:hidden;
+    background:#201C15;
+    font-family:'Noto Serif TC', serif;
+    color:var(--ink);
+  }
+
+  /* ---------- 外層容器：置中並依裝置縮放 ---------- */
+  .viewport{
+    position:fixed; inset:0; width:100vw; height:100vh;
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden;
+    background:#201C15;
+  }
+
+  /* ---------- 主畫面：固定設計尺寸 1280x720（16:9），用 transform 縮放 ---------- */
+  .stage{
+    width:1280px; height:720px; flex-shrink:0;
+    transform:scale(var(--stage-scale, 1));
+    transform-origin:center center;
+    background:var(--paper);
+    border:1px solid var(--line); border-radius:16px;
+    box-shadow:0 14px 44px rgba(0,0,0,0.45);
+    display:flex; flex-direction:column; overflow:hidden; position:relative;
+  }
+
+  .fs-btn{
+    font-family:inherit; font-size:12px; font-weight:600; cursor:pointer;
+    display:flex; align-items:center; gap:5px;
+    padding:7px 12px; border-radius:999px;
+    border:1.5px solid var(--line); background:#fff; color:var(--ink-soft);
+  }
+  .fs-btn:hover{ border-color:var(--ink-soft); color:var(--ink); }
+  @media (hover:none), (pointer:coarse){ .fs-btn{ display:none; } }
+
+  /* ---------- Header ---------- */
+  header{
+    flex-shrink:0;
+    padding:10px 20px; display:flex; align-items:center; justify-content:space-between;
+    gap:12px; flex-wrap:wrap;
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, rgba(255,251,240,0.9), rgba(255,251,240,0.3));
+  }
+  .brand{ display:flex; align-items:center; gap:9px; }
+  .brand .seal{
+    width:20px; height:20px; border-radius:5px; flex-shrink:0;
+    background:var(--cinnabar);
+    box-shadow:inset 0 0 0 2px rgba(255,251,240,0.5);
+  }
+  .brand h1{ font-size:16.5px; margin:0; font-weight:700; letter-spacing:1.5px; line-height:1.3; }
+  .brand h1 small{ display:block; font-size:10.5px; font-weight:500; color:var(--ink-soft); letter-spacing:1px; }
+
+  .steps{ display:flex; gap:6px; flex-wrap:wrap; }
+  .step-btn{
+    font-family:inherit; font-size:12px; font-weight:600;
+    display:flex; align-items:center; gap:6px;
+    padding:7px 13px; border-radius:999px; cursor:pointer;
+    border:1.5px solid var(--line); background:#fff; color:var(--ink-soft);
+    transition:all .15s ease; white-space:nowrap;
+  }
+  .step-btn:hover{ border-color:var(--ink-soft); }
+  .step-btn .dot{ width:8px; height:8px; border-radius:50%; background:var(--line); flex-shrink:0; }
+  .step-btn.active{ color:#fff8ea; }
+  .step-btn.active[data-tab="AB"]{ background:var(--cinnabar); border-color:var(--cinnabar); }
+  .step-btn.active[data-tab="AC"]{ background:var(--celadon); border-color:var(--celadon); }
+  .step-btn.active[data-tab="BOTH"]{ background:var(--gold); border-color:var(--gold); }
+  .step-btn.active .dot{ background:#fff8ea; }
+
+  /* ---------- Main split ---------- */
+  main{ flex:1; display:flex; min-height:0; }
+
+  .canvas-col{ flex:1.55; display:flex; flex-direction:column; min-width:0; padding:10px; gap:6px; }
+  .canvas-frame{
+    flex:1; position:relative; border-radius:12px;
+    background:
+      repeating-linear-gradient(0deg, rgba(46,42,34,0.02) 0px, transparent 1px, transparent 3px),
+      repeating-linear-gradient(90deg, rgba(46,42,34,0.02) 0px, transparent 1px, transparent 3px),
+      #FCF8EC;
+    border:1px solid var(--line-soft);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,0.6);
+    display:flex; align-items:center; justify-content:center; overflow:hidden;
+  }
+  svg{ width:100%; height:100%; touch-action:none; }
+
+  .empty-hint{
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    background:rgba(255,251,240,0.94); border:1.5px dashed var(--line);
+    border-radius:12px; padding:14px 22px; text-align:center;
+    font-size:13px; color:var(--ink-soft); line-height:1.8; max-width:78%;
+    pointer-events:none;
+  }
+  .empty-hint b{ color:var(--ink); }
+
+  .legend{ display:flex; gap:14px; justify-content:center; flex-wrap:wrap; padding:2px 4px; min-height:18px; }
+  .legend-item{ display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--ink-soft); }
+  .legend-item i{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .legend-item i.AB{ background:var(--cinnabar); }
+  .legend-item i.AC{ background:var(--celadon); }
+  .legend-item i.O{ background:var(--gold); }
+
+  /* ---------- Sidebar ---------- */
+  .panel{
+    flex:1; max-width:340px; border-left:1px solid var(--line);
+    padding:12px 16px; display:flex; flex-direction:column; gap:10px;
+    background:rgba(255,251,240,0.45); overflow-y:auto;
+  }
+
+  .status-bar{ display:flex; flex-direction:column; gap:5px; }
+  .badges{ display:flex; gap:6px; flex-wrap:wrap; }
+  .badge{ display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; padding:4px 10px; border-radius:6px; width:fit-content; }
+  .badge.AB{ background:var(--cinnabar-soft); color:var(--cinnabar); }
+  .badge.AC{ background:var(--celadon-soft); color:var(--celadon); }
+  .badge.O{ background:var(--gold-soft); color:var(--gold); }
+  .badge.NONE{ background:var(--line-soft); color:var(--ink-soft); }
+  .instr{ font-size:12.5px; line-height:1.65; color:var(--ink-soft); margin:0; }
+  .instr b{ color:var(--ink); }
+
+  .card{
+    background:var(--paper-card); border:1px solid var(--line);
+    border-radius:12px; padding:11px 13px;
+    display:flex; flex-direction:column; gap:9px;
+  }
+  .card-head{ font-size:12.5px; font-weight:700; letter-spacing:0.5px; display:flex; align-items:center; gap:6px; }
+  .hint{ font-size:11.5px; color:var(--ink-soft); line-height:1.6; margin:0; }
+
+  .switch-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12.5px; cursor:pointer; }
+  .switch{ position:relative; width:34px; height:19px; flex-shrink:0; }
+  .switch input{ opacity:0; width:0; height:0; position:absolute; }
+  .switch i{
+    position:absolute; inset:0; background:#e4d9bd; border-radius:999px; transition:.15s;
+  }
+  .switch i::before{
+    content:""; position:absolute; width:14px; height:14px; left:2.5px; top:2.5px;
+    background:#fff; border-radius:50%; transition:.15s; box-shadow:0 1px 3px rgba(0,0,0,0.25);
+  }
+  .switch input:checked + i{ background:var(--cinnabar); }
+  .switch input:checked + i::before{ transform:translateX(15px); }
+  .switch-row.disabled{ opacity:0.45; pointer-events:none; }
+
+  .seg{ display:flex; gap:6px; }
+  .seg button{
+    flex:1; font-family:inherit; font-size:12.5px; font-weight:700; padding:6px 0;
+    border-radius:8px; border:1.5px solid var(--line); background:#fff; color:var(--ink-soft); cursor:pointer;
+  }
+  .seg button.active{ background:var(--gold); border-color:var(--gold); color:#fff8ea; }
+  .seg.disabled{ opacity:0.45; pointer-events:none; }
+
+  .btn-row{ display:flex; gap:8px; flex-wrap:wrap; }
+  .ghost-btn{
+    font-family:inherit; font-size:12px; cursor:pointer; flex:1;
+    border:1px solid var(--line); background:#fff; color:var(--ink-soft);
+    padding:7px 10px; border-radius:8px; white-space:nowrap;
+  }
+  .ghost-btn:hover{ border-color:var(--ink-soft); color:var(--ink); }
+
+  .data-card{ display:flex; flex-direction:column; gap:2px; }
+  .data-card + .data-card{ margin-top:8px; padding-top:8px; border-top:1px dashed var(--line); }
+  .data-card h4{ margin:0 0 3px; font-size:12px; }
+  .data-card.AB h4{ color:var(--cinnabar); }
+  .data-card.AC h4{ color:var(--celadon); }
+  .data-card.O h4{ color:var(--gold); }
+  .data-row{ display:flex; justify-content:space-between; gap:8px; font-size:12px; line-height:1.75; }
+  .data-row .val{ font-variant-numeric:tabular-nums; font-weight:700; }
+  .val.AB{ color:var(--cinnabar); } .val.AC{ color:var(--celadon); } .val.O{ color:var(--gold); }
+
+  .footnote{ font-size:11.5px; color:var(--ink-soft); line-height:1.65; margin:0; padding-top:2px; }
+
+  .handle{ cursor:grab; } .handle:active{ cursor:grabbing; }
+  .vhandle{ cursor:grab; } .vhandle:active{ cursor:grabbing; }
+
+</style>
+</head>
+<body>
+
+<div class="viewport" id="viewport">
+<div class="stage" id="stage">
+  <header>
+    <div class="brand">
+      <span class="seal"></span>
+      <h1>圓心的軌跡<small>通過兩定點的圓・互動探索</small></h1>
+    </div>
+    <nav class="steps">
+      <button class="step-btn" data-tab="AB"><i class="dot"></i>① 圓過 A、B</button>
+      <button class="step-btn" data-tab="AC"><i class="dot"></i>② 圓過 A、C</button>
+      <button class="step-btn" data-tab="BOTH"><i class="dot"></i>③ 同時顯示</button>
+    </nav>
+    <button class="fs-btn" id="fsBtn">⛶ 全螢幕</button>
+  </header>
+
+  <main>
+    <div class="canvas-col">
+      <div class="canvas-frame">
+        <svg id="svg" viewBox="0 0 640 560" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="empty-hint" id="emptyHint">這是三角形 <b>ABC</b><br>請點選上方「① 圓過 A、B」或「② 圓過 A、C」<br>開始探索圓心可以怎麼移動</div>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <aside class="panel">
+      <div class="status-bar">
+        <div class="badges" id="badges"></div>
+        <p class="instr" id="instrText"></p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">🔺 三角形設定</div>
+        <p class="hint">拖曳 A、B、C 三個頂點，可以任意改變三角形的形狀。</p>
+        <label class="switch-row">
+          <span>鎖定為直角三角形</span>
+          <span class="switch"><input type="checkbox" id="chkRightAngle"><i></i></span>
+        </label>
+        <div class="seg disabled" id="vertexSeg">
+          <button type="button" data-v="A">直角在 A</button>
+          <button type="button" data-v="B" class="active">直角在 B</button>
+          <button type="button" data-v="C">直角在 C</button>
+        </div>
+        <button class="ghost-btn" id="resetTriBtn">重設三角形</button>
+      </div>
+
+      <div class="card" id="obsCard" style="display:none;">
+        <div class="card-head">🔍 觀察圓心</div>
+        <label class="switch-row" id="rowShowAB" style="display:none;"><span>顯示圓過 A、B</span><span class="switch"><input type="checkbox" id="chkShowAB" checked><i></i></span></label>
+        <label class="switch-row" id="rowShowAC" style="display:none;"><span>顯示圓過 A、C</span><span class="switch"><input type="checkbox" id="chkShowAC" checked><i></i></span></label>
+        <label class="switch-row"><span>顯示圓心移動的軌跡</span><span class="switch"><input type="checkbox" id="chkTrail"><i></i></span></label>
+        <label class="switch-row"><span>顯示移動所形成的直線</span><span class="switch"><input type="checkbox" id="chkLine"><i></i></span></label>
+        <label class="switch-row"><span id="radiusLabel">顯示圓心與 A、B 的連線</span><span class="switch"><input type="checkbox" id="chkRadius"><i></i></span></label>
+        <label class="switch-row" id="rowO" style="display:none;"><span>顯示交點 O</span><span class="switch"><input type="checkbox" id="chkO"><i></i></span></label>
+        <label class="switch-row" id="rowCircum" style="display:none;"><span>挑戰：O 的外接圓</span><span class="switch"><input type="checkbox" id="chkCircum"><i></i></span></label>
+        <div class="btn-row">
+          <button class="ghost-btn" id="resetBtn">重設圓心</button>
+          <button class="ghost-btn" id="clearTrailBtn">清除軌跡</button>
+        </div>
+      </div>
+
+      <div class="card" id="dataCardWrap" style="display:none;">
+        <div id="dataArea"></div>
+      </div>
+
+      <p class="footnote" id="footnote"></p>
+    </aside>
+  </main>
+</div>
+</div>
+
+<script>
+(function(){
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.getElementById('svg');
+  const VB = {w:640, h:560};
+
+  // 三角形三頂點（可變動，物件本身保持不變，只改 x, y）
+  const DEFAULT_PTS = {
+    A: {x:60,  y:210},
+    B: {x:160, y:480},
+    C: {x:560, y:460}
+  };
+  const A = {x:DEFAULT_PTS.A.x, y:DEFAULT_PTS.A.y};
+  const B = {x:DEFAULT_PTS.B.x, y:DEFAULT_PTS.B.y};
+  const C = {x:DEFAULT_PTS.C.x, y:DEFAULT_PTS.C.y};
+  const PTS = {A,B,C};
+
+  function dist(p,q){ return Math.hypot(p.x-q.x, p.y-q.y); }
+  function fmt(n){ return (Math.round(n*10)/10).toFixed(1); }
+  function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
+
+  function perpBisector(p1,p2){
+    const M = { x:(p1.x+p2.x)/2, y:(p1.y+p2.y)/2 };
+    const dx = p2.x-p1.x, dy = p2.y-p1.y;
+    const len = Math.hypot(dx,dy) || 1e-6;
+    const u = { x:-dy/len, y:dx/len };
+    return {M,u};
+  }
+
+  const DEF = {
+    AB: { p1:A, p2:B, label1:'A', label2:'B', colorHex:'#B7371E', softHex:'#F1DAD1' },
+    AC: { p1:A, p2:C, label1:'A', label2:'C', colorHex:'#4F8A72', softHex:'#D9E9E1' }
+  };
+  function getGeo(key){ return perpBisector(DEF[key].p1, DEF[key].p2); }
+
+  function lineIntersect(p, r, q, s){
+    const cross = (a,b)=> a.x*b.y - a.y*b.x;
+    const qp = {x:q.x-p.x, y:q.y-p.y};
+    const denom = cross(r,s);
+    if(Math.abs(denom) < 1e-9) return null;
+    const t = cross(qp, s) / denom;
+    return { x:p.x + r.x*t, y:p.y + r.y*t };
+  }
+  function computeO(){
+    const g1 = getGeo('AB'), g2 = getGeo('AC');
+    return lineIntersect(g1.M, g1.u, g2.M, g2.u);
+  }
+
+  const state = {
+    AB: { t: -100, trail: [] },
+    AC: { t: -50, trail: [] }
+  };
+  let mode = 'NONE';
+  let lineVisible = false;
+  let radiusVisible = false;
+  let trailVisible = false;
+  let showO = false;
+  let showCircum = false;
+  let showCircleAB = true;
+  let showCircleAC = true;
+  let rightAngleLock = false;
+  let rightAngleVertex = 'B';
+
+  function makeEl(tag, attrs){
+    const el = document.createElementNS(NS, tag);
+    for(const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+  function setAttrs(el, attrs){ for(const k in attrs) el.setAttribute(k, attrs[k]); }
+
+  // ---------- 三角形（動態） ----------
+  const gTri = makeEl('g', {});
+  const tri = makeEl('polygon', { fill:'none', stroke:'#3a352a', 'stroke-width':2.5, 'stroke-linejoin':'round' });
+  gTri.appendChild(tri);
+
+  const rightAngleMarker = makeEl('polyline', { fill:'none', stroke:'#3a352a', 'stroke-width':2 });
+  rightAngleMarker.style.display = 'none';
+  gTri.appendChild(rightAngleMarker);
+
+  const vertexEls = {};
+  const LABEL_OFFSET = { A:[-18,-12], B:[-24,22], C:[16,16] };
+  ['A','B','C'].forEach(key=>{
+    const hit = makeEl('circle', { r:15, fill:'transparent', class:'vhandle' });
+    const dot = makeEl('circle', { r:5, fill:'#3a352a' });
+    dot.style.pointerEvents = 'none';
+    const label = makeEl('text', { 'font-size':22, 'font-weight':700, fill:'#B7371E', 'font-family':"'Noto Serif TC', serif" });
+    label.style.pointerEvents = 'none';
+    label.textContent = key;
+    gTri.appendChild(hit); gTri.appendChild(dot); gTri.appendChild(label);
+    vertexEls[key] = {hit, dot, label};
+
+    let dragging = false;
+    hit.addEventListener('pointerdown', (e)=>{
+      dragging = true;
+      hit.setPointerCapture(e.pointerId);
+      clearTrail('AB'); clearTrail('AC');
+    });
+    hit.addEventListener('pointermove', (e)=>{
+      if(!dragging) return;
+      const pt = svg.createSVGPoint();
+      pt.x = e.clientX; pt.y = e.clientY;
+      const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
+      const nx = clamp(loc.x, 10, VB.w-10);
+      const ny = clamp(loc.y, 10, VB.h-10);
+
+      if(rightAngleLock && key === rightAngleVertex){
+        const others = ['A','B','C'].filter(k=>k!==key).map(k=>PTS[k]);
+        const center = { x:(others[0].x+others[1].x)/2, y:(others[0].y+others[1].y)/2 };
+        const radius = dist(others[0], others[1])/2;
+        const dx = nx-center.x, dy = ny-center.y;
+        const d = Math.hypot(dx,dy) || 1e-6;
+        PTS[key].x = center.x + dx/d*radius;
+        PTS[key].y = center.y + dy/d*radius;
+      } else {
+        PTS[key].x = nx;
+        PTS[key].y = ny;
+        if(rightAngleLock && key !== rightAngleVertex){
+          snapRightAngleVertex();
+        }
+      }
+      onVertexChanged();
+    });
+    hit.addEventListener('pointerup', ()=>{ dragging = false; });
+    hit.addEventListener('pointercancel', ()=>{ dragging = false; });
+  });
+
+  function snapRightAngleVertex(){
+    const key = rightAngleVertex;
+    const others = ['A','B','C'].filter(k=>k!==key).map(k=>PTS[k]);
+    const center = { x:(others[0].x+others[1].x)/2, y:(others[0].y+others[1].y)/2 };
+    const radius = dist(others[0], others[1])/2;
+    const p = PTS[key];
+    const dx = p.x-center.x, dy = p.y-center.y;
+    const d = Math.hypot(dx,dy) || 1e-6;
+    PTS[key].x = center.x + dx/d*radius;
+    PTS[key].y = center.y + dy/d*radius;
+  }
+
+  function updateTriangleVisuals(){
+    setAttrs(tri, { points:`${A.x},${A.y} ${B.x},${B.y} ${C.x},${C.y}` });
+    ['A','B','C'].forEach(key=>{
+      const p = PTS[key];
+      const [dx,dy] = LABEL_OFFSET[key];
+      setAttrs(vertexEls[key].hit, { cx:p.x, cy:p.y });
+      setAttrs(vertexEls[key].dot, { cx:p.x, cy:p.y });
+      setAttrs(vertexEls[key].label, { x:p.x+dx, y:p.y+dy });
+    });
+
+    if(rightAngleLock){
+      const key = rightAngleVertex;
+      const others = ['A','B','C'].filter(k=>k!==key);
+      const V = PTS[key], P1 = PTS[others[0]], P2 = PTS[others[1]];
+      const u1 = { x:P1.x-V.x, y:P1.y-V.y }; const l1 = Math.hypot(u1.x,u1.y)||1;
+      const u2 = { x:P2.x-V.x, y:P2.y-V.y }; const l2 = Math.hypot(u2.x,u2.y)||1;
+      const s = 18;
+      const q1 = { x:V.x+u1.x/l1*s, y:V.y+u1.y/l1*s };
+      const q3 = { x:V.x+u2.x/l2*s, y:V.y+u2.y/l2*s };
+      const q2 = { x:q1.x+u2.x/l2*s, y:q1.y+u2.y/l2*s };
+      setAttrs(rightAngleMarker, { points:`${q1.x},${q1.y} ${q2.x},${q2.y} ${q3.x},${q3.y}` });
+      rightAngleMarker.style.display = '';
+    } else {
+      rightAngleMarker.style.display = 'none';
+    }
+  }
+
+  function onVertexChanged(){
+    updateTriangleVisuals();
+    updateCircle('AB');
+    updateCircle('AC');
+    updateIntersectionVisuals();
+    renderDataArea();
+  }
+
+  // ---------- 每個圓的持久化元素 ----------
+  const groups = {};
+  const gFills = makeEl('g', {});   // 兩個圓的填色、輔助線、軌跡都在這層（下層）
+  const gHandles = makeEl('g', {}); // 兩個圓心把手都在這層（上層），確保永遠點得到
+  ['AB','AC'].forEach(key=>{
+    const cfg = DEF[key];
+    const fillG = makeEl('g', {});
+    const handleG = makeEl('g', {});
+    const line = makeEl('line', { stroke:cfg.colorHex, 'stroke-width':1.4, 'stroke-dasharray':'6 6', opacity:0.55 });
+    const trailGroup = makeEl('g', {});
+    const rad1 = makeEl('line', { stroke:cfg.colorHex, 'stroke-width':1.2, 'stroke-dasharray':'3 4', opacity:0.7 });
+    const rad2 = makeEl('line', { stroke:cfg.colorHex, 'stroke-width':1.2, 'stroke-dasharray':'3 4', opacity:0.7 });
+    const circle = makeEl('circle', { fill:cfg.softHex, 'fill-opacity':0.34, stroke:cfg.colorHex, 'stroke-width':2.5 });
+    const handle = makeEl('circle', { r:10, fill:'#fffaf0', stroke:cfg.colorHex, 'stroke-width':3, class:'handle' });
+    const handleLabel = makeEl('text', { 'font-size':13, 'font-weight':600, fill:cfg.colorHex, 'font-family':"'Noto Serif TC', serif" });
+    handleLabel.textContent = '圓心';
+
+    fillG.appendChild(line); fillG.appendChild(trailGroup); fillG.appendChild(rad1); fillG.appendChild(rad2);
+    fillG.appendChild(circle);
+    handleG.appendChild(handle); handleG.appendChild(handleLabel);
+    gFills.appendChild(fillG);
+    gHandles.appendChild(handleG);
+
+    groups[key] = { fillG, handleG, line, trailGroup, rad1, rad2, circle, handle, handleLabel };
+
+    let dragging = false;
+    handle.addEventListener('pointerdown', (e)=>{
+      dragging = true;
+      handle.setPointerCapture(e.pointerId);
+    });
+    handle.addEventListener('pointermove', (e)=>{
+      if(!dragging) return;
+      const pt = svg.createSVGPoint();
+      pt.x = e.clientX; pt.y = e.clientY;
+      const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
+      const {M,u} = getGeo(key);
+      const newT = (loc.x-M.x)*u.x + (loc.y-M.y)*u.y;
+      state[key].t = newT;
+      updateCircle(key);
+      recordTrailPoint(key, state[key].center);
+    });
+    handle.addEventListener('pointerup', ()=>{ dragging = false; });
+    handle.addEventListener('pointercancel', ()=>{ dragging = false; });
+  });
+  svg.appendChild(gFills);
+
+  // ---------- 交點 O 與外接圓 ----------
+  const gO = makeEl('g', {});
+  const circumCircle = makeEl('circle', { fill:'none', stroke:'#A47C2E', 'stroke-width':1.6, 'stroke-dasharray':'5 5', opacity:0.85 });
+  const oDot = makeEl('circle', { r:6, fill:'#A47C2E' });
+  const oLabel = makeEl('text', { 'font-size':18, 'font-weight':700, fill:'#A47C2E', 'font-family':"'Noto Serif TC', serif" });
+  oLabel.textContent = 'O';
+  gO.appendChild(circumCircle); gO.appendChild(oDot); gO.appendChild(oLabel);
+  svg.appendChild(gO);
+  svg.appendChild(gHandles); // 兩個圓心把手放在填色與外接圓之上，確保永遠點得到
+  svg.appendChild(gTri); // 三角形與頂點把手放在最上層，避免被圓的填色區域擋住而無法拖曳
+
+  function updateIntersectionVisuals(){
+    const O = computeO();
+    if(!O){ gO.style.display = 'none'; return; }
+    const r = dist(O, A);
+    setAttrs(circumCircle, { cx:O.x, cy:O.y, r:r });
+    setAttrs(oDot, { cx:O.x, cy:O.y });
+    setAttrs(oLabel, { x:O.x+10, y:O.y-10 });
+    state.O = O;
+    state.circumR = r;
+  }
+
+  // ---------- 更新單一圓 ----------
+  function centerOf(key){
+    const {M,u} = getGeo(key);
+    const t = state[key].t;
+    return { x:M.x+u.x*t, y:M.y+u.y*t };
+  }
+
+  function updateCircle(key){
+    const cfg = DEF[key];
+    const el = groups[key];
+    const center = centerOf(key);
+    const r = dist(center, cfg.p1);
+    const {M,u} = getGeo(key);
+    const L = 900;
+
+    setAttrs(el.line, { x1:M.x-u.x*L, y1:M.y-u.y*L, x2:M.x+u.x*L, y2:M.y+u.y*L });
+    setAttrs(el.rad1, { x1:center.x, y1:center.y, x2:cfg.p1.x, y2:cfg.p1.y });
+    setAttrs(el.rad2, { x1:center.x, y1:center.y, x2:cfg.p2.x, y2:cfg.p2.y });
+    setAttrs(el.circle, { cx:center.x, cy:center.y, r:r });
+    setAttrs(el.handle, { cx:center.x, cy:center.y });
+    setAttrs(el.handleLabel, { x:center.x+13, y:center.y-13 });
+
+    state[key].center = center;
+    state[key].radius = r;
+    renderDataArea();
+  }
+
+  function recordTrailPoint(key, center){
+    const trail = state[key].trail;
+    const last = trail[trail.length-1];
+    if(!last || dist(last, center) > 4){
+      trail.push({x:center.x, y:center.y});
+      if(trailVisible){
+        groups[key].trailGroup.appendChild(makeEl('circle', { cx:center.x, cy:center.y, r:2.4, fill:DEF[key].colorHex, opacity:0.55 }));
+      }
+    }
+  }
+
+  function renderTrailFull(key){
+    const el = groups[key];
+    el.trailGroup.innerHTML = '';
+    state[key].trail.forEach(p=>{
+      el.trailGroup.appendChild(makeEl('circle', { cx:p.x, cy:p.y, r:2.4, fill:DEF[key].colorHex, opacity:0.55 }));
+    });
+  }
+  function clearTrail(key){
+    state[key].trail = [];
+    groups[key].trailGroup.innerHTML = '';
+  }
+
+  // ---------- 可見度 ----------
+  function applyVisibility(){
+    const showAB = (mode === 'AB') || (mode === 'BOTH' && showCircleAB);
+    const showAC = (mode === 'AC') || (mode === 'BOTH' && showCircleAC);
+    groups.AB.fillG.style.display = showAB ? '' : 'none';
+    groups.AB.handleG.style.display = showAB ? '' : 'none';
+    groups.AC.fillG.style.display = showAC ? '' : 'none';
+    groups.AC.handleG.style.display = showAC ? '' : 'none';
+
+    groups.AB.line.style.display = lineVisible ? '' : 'none';
+    groups.AC.line.style.display = lineVisible ? '' : 'none';
+    groups.AB.rad1.style.display = radiusVisible ? '' : 'none';
+    groups.AB.rad2.style.display = radiusVisible ? '' : 'none';
+    groups.AC.rad1.style.display = radiusVisible ? '' : 'none';
+    groups.AC.rad2.style.display = radiusVisible ? '' : 'none';
+    groups.AB.trailGroup.style.display = trailVisible ? '' : 'none';
+    groups.AC.trailGroup.style.display = trailVisible ? '' : 'none';
+
+    const oOk = (mode === 'BOTH' && showO && state.O);
+    gO.style.display = oOk ? '' : 'none';
+    circumCircle.style.display = (oOk && showCircum) ? '' : 'none';
+
+    document.getElementById('rowO').style.display = (mode === 'BOTH') ? 'flex' : 'none';
+    document.getElementById('rowCircum').style.display = (mode === 'BOTH' && showO) ? 'flex' : 'none';
+    document.getElementById('rowShowAB').style.display = (mode === 'BOTH') ? 'flex' : 'none';
+    document.getElementById('rowShowAC').style.display = (mode === 'BOTH') ? 'flex' : 'none';
+
+    const hasCircle = (mode !== 'NONE');
+    document.getElementById('obsCard').style.display = hasCircle ? '' : 'none';
+    document.getElementById('dataCardWrap').style.display = hasCircle ? '' : 'none';
+    document.getElementById('emptyHint').style.display = hasCircle ? 'none' : '';
+
+    renderLegend();
+  }
+
+  function renderLegend(){
+    const legend = document.getElementById('legend');
+    let html = '';
+    if(mode === 'AB' || (mode === 'BOTH' && showCircleAB)) html += `<span class="legend-item"><i class="AB"></i>圓過 A、B</span>`;
+    if(mode === 'AC' || (mode === 'BOTH' && showCircleAC)) html += `<span class="legend-item"><i class="AC"></i>圓過 A、C</span>`;
+    if(mode === 'BOTH' && showO && state.O) html += `<span class="legend-item"><i class="O"></i>交點 O</span>`;
+    legend.innerHTML = html;
+  }
+
+  function updateBadgesAndText(){
+    const badges = document.getElementById('badges');
+    const instr = document.getElementById('instrText');
+    const foot = document.getElementById('footnote');
+    const radiusLabel = document.getElementById('radiusLabel');
+    if(mode === 'NONE'){
+      badges.innerHTML = `<span class="badge NONE">尚未選擇</span>`;
+      instr.innerHTML = `請點選上方步驟①或②，開始探索圓心的移動。`;
+      foot.textContent = '';
+    }else if(mode === 'AB'){
+      badges.innerHTML = `<span class="badge AB">功能① 圓過 A、B</span>`;
+      instr.innerHTML = `拖曳 <b>●圓心</b>，觀察它會如何改變？`;
+      foot.textContent = '💡 不管圓心怎麼移動，只要畫得出通過 A、B 兩點的圓，圓心到 A 和到 B 的距離就一定相等。';
+      radiusLabel.textContent = '顯示圓心與 A、B 的連線';
+    }else if(mode === 'AC'){
+      badges.innerHTML = `<span class="badge AC">功能② 圓過 A、C</span>`;
+      instr.innerHTML = `拖曳 <b>●圓心</b>，觀察它會如何改變？`;
+      foot.textContent = '💡 不管圓心怎麼移動，只要畫得出通過 A、C 兩點的圓，圓心到 A 和到 C 的距離就一定相等。';
+      radiusLabel.textContent = '顯示圓心與 A、C 的連線';
+    }else{
+      badges.innerHTML = `<span class="badge AB">① A、B</span><span class="badge AC">② A、C</span>`;
+      instr.innerHTML = `兩個圓同時出現。分別拖曳兩個 <b>●圓心</b>，觀察它們會如何改變？`;
+      foot.textContent = '💡 這兩條直線的交點 O，到 A、B、C 三點的距離有什麼關係？若把三角形鎖定為直角三角形，再觀察 O 跑到哪裡去了！';
+      radiusLabel.textContent = '顯示圓心與 A、B、A、C 的連線';
+    }
+  }
+
+  function renderDataArea(){
+    const area = document.getElementById('dataArea');
+    let html = '';
+    if((mode === 'AB' || (mode === 'BOTH' && showCircleAB)) && state.AB.center) html += cardHTML('AB','A','B',state.AB);
+    if((mode === 'AC' || (mode === 'BOTH' && showCircleAC)) && state.AC.center) html += cardHTML('AC','A','C',state.AC);
+    if(mode === 'BOTH' && showO && state.O){
+      html += `<div class="data-card O"><h4>交點 O</h4>
+        <div class="data-row"><span>O 座標</span><span class="val O">(${fmt(state.O.x)}, ${fmt(state.O.y)})</span></div>
+        <div class="data-row"><span>O 到 A 的距離</span><span class="val O">${fmt(dist(state.O,A))}</span></div>
+        <div class="data-row"><span>O 到 B 的距離</span><span class="val O">${fmt(dist(state.O,B))}</span></div>
+        <div class="data-row"><span>O 到 C 的距離</span><span class="val O">${fmt(dist(state.O,C))}</span></div>
+      </div>`;
+    }
+    area.innerHTML = html;
+  }
+
+  function cardHTML(key,l1,l2,s){
+    return `<div class="data-card ${key}"><h4>圓過 ${l1}、${l2}</h4>
+      <div class="data-row"><span>圓心座標</span><span class="val ${key}">(${fmt(s.center.x)}, ${fmt(s.center.y)})</span></div>
+      <div class="data-row"><span>半徑 r</span><span class="val ${key}">${fmt(s.radius)}</span></div>
+      <div class="data-row"><span>圓心到 ${l1} 的距離</span><span class="val ${key}">${fmt(dist(s.center, DEF[key].p1))}</span></div>
+      <div class="data-row"><span>圓心到 ${l2} 的距離</span><span class="val ${key}">${fmt(dist(s.center, DEF[key].p2))}</span></div>
+    </div>`;
+  }
+
+  // ---------- 控制項 ----------
+  document.querySelectorAll('.step-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      mode = btn.dataset.tab;
+      document.querySelectorAll('.step-btn').forEach(b=> b.classList.toggle('active', b===btn));
+      if(mode !== 'BOTH'){
+        showCircleAB = true; showCircleAC = true;
+        document.getElementById('chkShowAB').checked = true;
+        document.getElementById('chkShowAC').checked = true;
+      }
+      updateBadgesAndText();
+      applyVisibility();
+      renderDataArea();
+    });
+  });
+
+  document.getElementById('chkShowAB').addEventListener('change', (e)=>{ showCircleAB = e.target.checked; applyVisibility(); renderDataArea(); });
+  document.getElementById('chkShowAC').addEventListener('change', (e)=>{ showCircleAC = e.target.checked; applyVisibility(); renderDataArea(); });
+  document.getElementById('chkLine').addEventListener('change', (e)=>{ lineVisible = e.target.checked; applyVisibility(); });
+  document.getElementById('chkRadius').addEventListener('change', (e)=>{ radiusVisible = e.target.checked; applyVisibility(); });
+  document.getElementById('chkTrail').addEventListener('change', (e)=>{
+    trailVisible = e.target.checked;
+    if(trailVisible){ renderTrailFull('AB'); renderTrailFull('AC'); }
+    applyVisibility();
+  });
+  document.getElementById('chkO').addEventListener('change', (e)=>{ showO = e.target.checked; applyVisibility(); renderDataArea(); });
+  document.getElementById('chkCircum').addEventListener('change', (e)=>{ showCircum = e.target.checked; applyVisibility(); });
+
+  document.getElementById('chkRightAngle').addEventListener('change', (e)=>{
+    rightAngleLock = e.target.checked;
+    document.getElementById('vertexSeg').classList.toggle('disabled', !rightAngleLock);
+    if(rightAngleLock){ snapRightAngleVertex(); onVertexChanged(); }
+    else { updateTriangleVisuals(); }
+  });
+  document.querySelectorAll('#vertexSeg button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      rightAngleVertex = btn.dataset.v;
+      document.querySelectorAll('#vertexSeg button').forEach(b=> b.classList.toggle('active', b===btn));
+      if(rightAngleLock){ snapRightAngleVertex(); onVertexChanged(); }
+    });
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', ()=>{
+    if(mode === 'AB' || mode === 'BOTH'){ state.AB.t = -100; updateCircle('AB'); }
+    if(mode === 'AC' || mode === 'BOTH'){ state.AC.t = -50; updateCircle('AC'); }
+  });
+  document.getElementById('clearTrailBtn').addEventListener('click', ()=>{
+    if(mode === 'AB' || mode === 'BOTH') clearTrail('AB');
+    if(mode === 'AC' || mode === 'BOTH') clearTrail('AC');
+  });
+  document.getElementById('resetTriBtn').addEventListener('click', ()=>{
+    A.x=DEFAULT_PTS.A.x; A.y=DEFAULT_PTS.A.y;
+    B.x=DEFAULT_PTS.B.x; B.y=DEFAULT_PTS.B.y;
+    C.x=DEFAULT_PTS.C.x; C.y=DEFAULT_PTS.C.y;
+    document.getElementById('chkRightAngle').checked = false;
+    rightAngleLock = false;
+    document.getElementById('vertexSeg').classList.add('disabled');
+    clearTrail('AB'); clearTrail('AC');
+    onVertexChanged();
+  });
+
+  // ---------- 初始化 ----------
+  updateTriangleVisuals();
+  updateCircle('AB');
+  updateCircle('AC');
+  updateIntersectionVisuals();
+  updateBadgesAndText();
+  applyVisibility();
+
+  // ---------- 依裝置自動縮放（維持 16:9，電腦可全螢幕） ----------
+  const stageEl = document.getElementById('stage');
+  const DESIGN_W = 1280, DESIGN_H = 720;
+  function fitStage(){
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const scale = Math.min(vw / DESIGN_W, vh / DESIGN_H);
+    stageEl.style.setProperty('--stage-scale', scale);
+  }
+  window.addEventListener('resize', fitStage);
+  window.addEventListener('orientationchange', fitStage);
+  document.addEventListener('fullscreenchange', fitStage);
+  document.addEventListener('webkitfullscreenchange', fitStage);
+  fitStage();
+
+  // ---------- 全螢幕按鈕（桌機用；平板/手機已用CSS隱藏此按鈕） ----------
+  const fsBtn = document.getElementById('fsBtn');
+  const viewportEl = document.getElementById('viewport');
+  function isFullscreen(){
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+  function updateFsBtn(){
+    fsBtn.textContent = isFullscreen() ? '⤢ 退出全螢幕' : '⛶ 全螢幕';
+  }
+  fsBtn.addEventListener('click', ()=>{
+    if(!isFullscreen()){
+      const req = viewportEl.requestFullscreen || viewportEl.webkitRequestFullscreen;
+      if(req) req.call(viewportEl).catch ? req.call(viewportEl).catch(()=>{}) : req.call(viewportEl);
+    } else {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if(exit) exit.call(document);
+    }
+  });
+  document.addEventListener('fullscreenchange', updateFsBtn);
+  document.addEventListener('webkitfullscreenchange', updateFsBtn);
+})();
+</script>
+</body>
+</html>
